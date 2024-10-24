@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aged Care Facility Prediction Tool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/9.5.2/math.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+
+        h1, h2 {
+            color: #333;
+            text-align: center;
+        }
+
+        label {
+            font-weight: bold;
+        }
+
+        select, input, button {
+            padding: 10px;
+            margin: 10px 0;
+            width: 100%;
+            max-width: 300px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        #dataInputs {
+            margin-top: 20px;
+        }
+
+        #predictionResult {
+            text-align: center;
+            font-size: 1.5em;
+            margin-top: 20px;
+            color: #28a745;
+        }
+
+        canvas {
+            display: block;
+            margin: 20px auto;
+            width: 100%; /* Makes it responsive */
+            max-width: 800px; /* Maximum width for larger screens */
+            height: 400px; /* Fixed height */
+        }
+
+        h3 {
+            color: #555;
+        }
+
+        ul, ol {
+            margin: 10px auto;
+            padding-left: 20px;
+            max-width: 600px;
+            color: #333;
+        }
+
+        .instructions {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-top: 30px;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 0.9em;
+            margin-top: 30px;
+            color: #777;
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: center;
+            gap: 10px; /* Space between buttons */
+        }
+    </style>
+</head>
+<body>
+    <h1>Aged Care Facility Prediction Tool - Linear Regression Model</h1>
+
+    <!-- Dropdown to select category -->
+    <label for="category">Select the category to predict:</label>
+    <select id="category">
+        <option value="profit">Profit</option>
+        <option value="expenditure">Expenditure</option>
+        <option value="occupancy">Occupancy Rate</option>
+        <option value="staffing">Staffing Requirements</option>
+        <option value="maintenance">Maintenance Costs</option>
+        <option value="careNeeds">Resident Care Needs (Acuity Levels)</option>
+        <option value="utility">Utility and Operational Costs</option>
+    </select>
+
+    <br><br>
+
+    <!-- Input section for number of periods -->
+    <label for="numPeriods">Enter the number of periods of data:</label>
+    <input type="number" id="numPeriods" value="10" min="1">
+    
+    <!-- Dropdown for time scale -->
+    <label for="timeScale">Select time scale:</label>
+    <select id="timeScale">
+        <option value="days">Years</option>
+        <option value="weeks">Weeks</option>
+        <option value="months">Months</option>
+        <option value="years">Days</option>
+    </select>
+    
+    <button onclick="collectData()">Submit</button>
+
+    <div id="dataInputs"></div>
+
+    <!-- Button container for predict and refresh buttons -->
+    <div class="button-container">
+        <button id="predictButton" style="display:none;" onclick="predict()">Predict Next Period</button>
+        <button id="refreshButton" style="display:none;" onclick="refresh()">Refresh</button>
+    </div>
+
+    <h2 id="predictionResult"></h2>
+
+    <canvas id="myChart" width="800" height="400"></canvas>
+
+    <script>
+        let numPeriods;
+        let dataValues = [];
+        let category;
+        let timeScale;
+
+        // Step 1: Collect data based on the number of periods and selected category
+        function collectData() {
+            numPeriods = parseInt(document.getElementById('numPeriods').value);
+            category = document.getElementById('category').value;  // Get selected category
+            timeScale = document.getElementById('timeScale').value;  // Get selected time scale
+            let dataInputs = document.getElementById('dataInputs');
+            dataInputs.innerHTML = '';
+
+            let label = getLabel(category);
+
+            for (let i = 1; i <= numPeriods; i++) {
+                dataInputs.innerHTML += `<label for="period${i}">${label} for ${i} ${timeScale}: </label>
+                <input type="number" id="period${i}" step="any" placeholder="Enter value for ${i} ${timeScale}"><br>`;
+            }
+
+            // Show the predict and refresh buttons after inputs are ready
+            document.getElementById('predictButton').style.display = 'block';
+            document.getElementById('refreshButton').style.display = 'block';
+        }
+
+        // Helper function to return the proper label based on the selected category
+        function getLabel(category) {
+            switch (category) {
+                case 'profit': return 'Profit';
+                case 'expenditure': return 'Expenditure';
+                case 'occupancy': return 'Occupancy Rate (%)';
+                case 'staffing': return 'Staffing Requirements (number of staff)';
+                case 'maintenance': return 'Maintenance Costs ($)';
+                case 'careNeeds': return 'Resident Care Needs (acuity level)';
+                case 'utility': return 'Utility Costs ($)';
+                default: return 'Data';
+            }
+        }
+
+        // Step 2: Linear Regression Calculation
+        function predict() {
+            dataValues = [];
+            for (let i = 1; i <= numPeriods; i++) {
+                dataValues.push(parseFloat(document.getElementById(`period${i}`).value));
+            }
+
+            let X = [];
+            for (let i = 1; i <= numPeriods; i++) {
+                X.push(i);  // Periods (1, 2, 3, ..., numPeriods)
+            }
+
+            // Calculate the slope (m) and intercept (b) using linear regression formula
+            let sumX = math.sum(X);
+            let sumY = math.sum(dataValues);
+            let sumXY = math.sum(X.map((xi, idx) => xi * dataValues[idx]));
+            let sumXSquare = math.sum(X.map(xi => xi * xi));
+
+            let slope = (numPeriods * sumXY - sumX * sumY) / (numPeriods * sumXSquare - sumX * sumX);
+            let intercept = (sumY - slope * sumX) / numPeriods;
+
+            // Predict the value for the next period
+            let nextPeriod = numPeriods + 1;
+            let predictedValue = slope * nextPeriod + intercept;
+
+            let label = getLabel(category);
+            document.getElementById('predictionResult').innerText = `Predicted ${label} for ${nextPeriod} ${timeScale}: ${predictedValue.toFixed(2)}`;
+
+            // Step 3: Visualize the data and regression line
+            plotData(X, dataValues, slope, intercept, nextPeriod, predictedValue);
+        }
+
+        // Step 4: Plot the data and the regression line
+        function plotData(X, Y, slope, intercept, nextPeriod, predictedValue) {
+            const ctx = document.getElementById('myChart').getContext('2d');
+
+            // Actual data points
+            const actualData = X.map((xi, idx) => ({ x: xi, y: Y[idx] }));
+
+            // Predicted points for the regression line
+            const regressionData = X.map(xi => ({ x: xi, y: slope * xi + intercept }));
+            regressionData.push({ x: nextPeriod, y: predictedValue });  // Add the prediction point
+
+            let label = getLabel(category);
+
+            // Create the chart
+            new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: `Actual ${label}`,
+                            data: actualData,
+                            borderColor: 'blue',
+                            backgroundColor: 'blue',
+                            showLine: false
+                        },
+                        {
+                            label: 'Regression Line',
+                            data: regressionData,
+                            borderColor: 'red',
+                            fill: false,
+                            showLine: true
+                        },
+                        {
+                            label: `Prediction for ${nextPeriod} ${timeScale}`,
+                            data: [{ x: nextPeriod, y: predictedValue }],
+                            borderColor: 'green',
+                            backgroundColor: 'green',
+                            showLine: false,
+                            pointRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            title: {
+                                display: true,
+                                text: 'Period'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: label
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Function to refresh the inputs and clear results
+        function refresh() {
+            document.getElementById('dataInputs').innerHTML = '';
+            document.getElementById('numPeriods').value = 10; // Reset to default
+            document.getElementById('predictionResult').innerText = '';
+            document.getElementById('predictButton').style.display = 'none';
+            document.getElementById('refreshButton').style.display = 'none';
+            document.getElementById('myChart').getContext('2d').clearRect(0, 0, 800, 400); // Clear the canvas
+        }
+    </script>
+
+    <div class="instructions">
+        <h2>Instructions</h2>
+        <p>This tool allows you to predict key operational and financial metrics for an aged care facility based on historical data.</p>
+        
+        <h3>Categories:</h3>
+        <ul>
+            <li><strong>Profit:</strong> Input annual profit figures over the past years to predict future profit.</li>
+            <li><strong>Expenditure:</strong> Enter historical expenditures to forecast future costs.</li>
+            <li><strong>Occupancy Rate:</strong> Record the percentage of occupied beds to estimate future occupancy rates.</li>
+            <li><strong>Staffing Requirements:</strong> Provide staffing numbers to predict future staff needs based on trends.</li>
+            <li><strong>Maintenance Costs:</strong> Enter annual maintenance costs to forecast future expenses.</li>
+            <li><strong>Resident Care Needs:</strong> Input the number of residents requiring high care to predict future care needs.</li>
+            <li><strong>Utility Costs:</strong> Record utility costs over the years to estimate future operational costs.</li>
+        </ul>
+
+        <h3>Steps to Use the Tool:</h3>
+        <ol>
+            <li>Select a category from the dropdown menu.</li>
+            <li>Enter the number of periods of historical data you want to analyze.</li>
+            <li>Select the time scale (Days, Weeks, Months, Years).</li>
+            <li>Provide the data for each period in the respective input fields that appear.</li>
+            <li>Click the "Predict Next Period" button to generate a prediction for the following period.</li>
+            <li>If needed, click the "Refresh" button to clear all inputs and results.</li>
+            <li>The predicted value will be displayed along with a graph showing historical data, the regression line, and the predicted point.</li>
+        </ol>
+
+        <h3>Example:</h3>
+        <p>If you want to predict profit, select "Profit" from the dropdown, enter the last 10 periods of profits, select the time scale, and click "Predict." The tool will display the expected profit for the next period along with a visual representation of the data.</p>
+
+        <h3>Outcome:</h3>
+        <p>By using this tool, you can make informed decisions regarding budget allocations, staffing, and overall operational planning for your aged care facility.</p>
+    </div>
+
+    <div class="footer">
+        &copy; 2024 Michael Bennett - Peninsula Villages - Prediction Tool. All rights reserved.
+    </div>
+</body>
+</html>
